@@ -1,4 +1,4 @@
-# Spark-KafkaToHBase
+# SparkStreamingHBase
 This program illustrates how to create Kafka Producer, Kafka Consumer, and insert streaming data to HBase using Java and Spark.
 * Producer: reads hourly time series of humidity data (humidity.json) and sends to Kafka.
 * Consumer: consumes data from Kafka, transforms, and saves to HBase.
