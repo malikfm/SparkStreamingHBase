@@ -55,8 +55,7 @@ args[0]
 }
 </pre>
 
-args[1]
-<pre>/path/humidity.json</pre>
+args[1]: path to JSON file
 
 #### Consumer
 args[0]
