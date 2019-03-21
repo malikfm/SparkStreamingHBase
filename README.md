@@ -92,10 +92,10 @@ args[0]
 ## Running the program
 ### Producer
 <pre>
-spark-submit --class com.malik.main.ProducerMain --master local[2] malik/engine/Spark-KafkaToHBase-1.0-SNAPSHOT-jar-with-dependencies.jar '{"kafka":{"broker":"datanode01:6667,datanode02:6667,datanode03:6667","kafka_topic":"test"}}' '/home/malik/data/humidity.json'
+spark-submit --class com.malik.main.ProducerMain --master local[2] malik/engine/SparkStreamingHBase-1.0-SNAPSHOT-jar-with-dependencies.jar '{"kafka":{"broker":"datanode01:6667,datanode02:6667,datanode03:6667","kafka_topic":"test"}}' '/home/malik/data/humidity.json'
 </pre>
 
 ### Consumer
 <pre>
-spark-submit --class com.malik.main.ConsumerMain --master local[2] --conf spark.streaming.backpressure.enabled=true --conf spark.streaming.kafka.maxRatePerPartition=100 malik/engine/Spark-KafkaToHBase-1.0-SNAPSHOT-jar-with-dependencies.jar '{"hbase":{"output_table":"test","master":"namenode01,namenode02","quorum":"master,namenode01,namenode02"},"kafka":{"broker":"datanode01:6667,datanode02:6667,datanode03:6667","group_name":"group-test","auto_offset_reset":"earliest","auto_commit":true,"kafka_topics":{"test":2}}}'
+spark-submit --class com.malik.main.ConsumerMain --master local[2] --conf spark.streaming.backpressure.enabled=true --conf spark.streaming.kafka.maxRatePerPartition=100 malik/engine/SparkStreamingHBase-1.0-SNAPSHOT-jar-with-dependencies.jar '{"hbase":{"output_table":"test","master":"namenode01,namenode02","quorum":"master,namenode01,namenode02"},"kafka":{"broker":"datanode01:6667,datanode02:6667,datanode03:6667","group_name":"group-test","auto_offset_reset":"earliest","auto_commit":true,"kafka_topics":{"test":2}}}'
 </pre>
