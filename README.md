@@ -10,7 +10,7 @@ Please ensure that you have met the following requirements:
 * Apache HBase 1.x
 
 ## Using this project
-This project consists of two main class:
+This project consists of two main classes:
 * ProducerMain: read hourly time series of humidity data (humidity.json) then send to Kafka.
 * ConsumerMain: consume data from Kafka, transform the data then save to HBase.
 
