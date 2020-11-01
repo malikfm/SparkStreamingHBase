@@ -1,5 +1,6 @@
 # SparkStreamingHBase
-This project illustrates how to create Kafka Producer, Kafka Consumer, and insert streaming data into HBase using Java and Spark. Humidity data were taken from https://www.kaggle.com/selfishgene/historical-hourly-weather-data?select=humidity.csv
+This project illustrates how to create Kafka Producer, Kafka Consumer, and insert streaming data into HBase using Java and Spark.
+> Dummy data were taken from https://www.kaggle.com/selfishgene/historical-hourly-weather-data, humidity.csv then transformed to JSON format.
 
 ## Prerequisites
 Please ensure that you have met the following requirements:
