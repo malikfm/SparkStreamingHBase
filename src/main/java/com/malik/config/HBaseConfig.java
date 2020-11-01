@@ -8,33 +8,26 @@ import org.apache.hadoop.mapreduce.Job;
 import java.io.IOException;
 
 public class HBaseConfig {
+    private final String outputTable;
+    private final String hbaseMaster;
+    private final String zkQuorum;
 
-    private String outputTable;
-    private String hbaseMaster;
-    private String zookeeperQuorum;
-
-    /**
-     * Set variable in constructor
-     * @param outputTable -> String output table name
-     * @param hbaseMaster -> HBase Master host
-     * @param zookeeperQuorum -> Zookeeper host
-     */
-    public HBaseConfig(String outputTable, String hbaseMaster, String zookeeperQuorum) {
+    public HBaseConfig(String outputTable, String hbaseMaster, String zkQuorum) {
         this.outputTable = outputTable;
         this.hbaseMaster = hbaseMaster;
-        this.zookeeperQuorum = zookeeperQuorum;
+        this.zkQuorum = zkQuorum;
     }
 
     /**
-     * Set HBase configuration
-     * @return HBase configuration
+     * Set hbase config
+     * @return key value object of config
      */
     private Configuration hbaseConfiguration() {
         Configuration configuration = HBaseConfiguration.create();
         configuration.set("hbase.master", hbaseMaster);
         configuration.set("zookeeper.znode.parent", "/hbase-unsecure");
         configuration.setInt("timeout", 120000);
-        configuration.set("hbase.zookeeper.quorum", zookeeperQuorum);
+        configuration.set("hbase.zookeeper.quorum", zkQuorum);
         configuration.set("hbase.client.keyvalue.maxsize", "0");
         configuration.set("hbase.client.scanner.timeout.period", "100000");
         configuration.set("hbase.rpc.timeout", "100000");
@@ -45,9 +38,9 @@ public class HBaseConfig {
     }
 
     /**
-     * Set HBase job
-     * @return HBase job
-     * @throws IOException -> Exception
+     * Set hbase job
+     * @return hbase job context
+     * @throws IOException
      */
     public Job hbaseJob() throws IOException {
         Job job = Job.getInstance(hbaseConfiguration());

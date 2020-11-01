@@ -1,8 +1,8 @@
 package com.malik.main;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.malik.config.HBaseConfig;
 import com.malik.config.KafkaConfig;
-import com.malik.util.ApplicationUtil;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -23,71 +23,99 @@ import java.util.List;
 import java.util.Map;
 
 public class ConsumerMain {
-    public static void main(String[] args) throws InterruptedException, IOException {
+    public static void main(String[] args) throws InterruptedException {
+        // Separate by coma for multiple bootstrap server
+        String bootstrapServer = "localhost:6667";
+        String groupName = "group_test";
+        String autoOffsetReset = "earliest";
 
-        // Instantiate Spark
+        // List of topics, consumer is able to consume from multiple topics
+        List<String> kafkaTopics = new ArrayList<>();
+        kafkaTopics.add("test_topic");
+
+        // Separate by comma for multiple hbase master and zookeeper quorum
+        String hbaseMaster = "localhost";
+        String zkQuorum = "localhost:2181";
+        String outputTable = "test_table";
+
+        // Instantiate spark without config because spark config will be set in running command
         SparkSession sparkSession = SparkSession.builder()
-                .appName("ConsumerMain")
+                .appName("ConsumerTest")
                 .getOrCreate();
+
         JavaSparkContext sparkContext = new JavaSparkContext(sparkSession.sparkContext());
         JavaStreamingContext streamingContext = new JavaStreamingContext(sparkContext, new Duration(5000));
 
-        // Instantiate config / util
-        ApplicationUtil applicationUtil = new ApplicationUtil();
+        Map<String, Object> consumerConfig = new KafkaConfig()
+                .consumerConfig(bootstrapServer, groupName, autoOffsetReset);
+        HBaseConfig hBaseConfig = new HBaseConfig(outputTable, hbaseMaster, zkQuorum);
 
-        Map<String, Object> mapConfig = applicationUtil.convertJSONToMap(args[0]);
-        Map<String, Object> mapKafkaConfig = (Map<String, Object>) mapConfig.get("kafka");
-        Map<String, Object> mapHbaseConfig = (Map<String, Object>) mapConfig.get("hbase");
-
-        KafkaConfig kafkaConfig = new KafkaConfig((String) mapKafkaConfig.get("broker"), (String) mapKafkaConfig.get("group_name"), (String) mapKafkaConfig.get("auto_offset_reset"), (Boolean) mapKafkaConfig.get("auto_commit"), (Map<String, Integer>) mapKafkaConfig.get("kafka_topics"));
-        HBaseConfig hBaseConfig = new HBaseConfig((String) mapHbaseConfig.get("output_table"), (String) mapHbaseConfig.get("master"), (String) mapHbaseConfig.get("quorum"));
-
-        // Create direct stream from Kafka
-        JavaInputDStream<ConsumerRecord<String, String>> directStream = KafkaUtils.createDirectStream(streamingContext, LocationStrategies.PreferConsistent(),
-                ConsumerStrategies.Assign(kafkaConfig.kafkaTopics(), kafkaConfig.kafkaConfiguration()));
+        // Create stream from kafka
+        JavaInputDStream<ConsumerRecord<String, String>> directStream = KafkaUtils
+                .createDirectStream(
+                        streamingContext,
+                        LocationStrategies.PreferConsistent(),
+                        ConsumerStrategies.Subscribe(kafkaTopics, consumerConfig)
+                );
 
         directStream.foreachRDD(javaRDD -> {
-
-            // Get offset range
             OffsetRange[] offsetRanges = ((HasOffsetRanges) javaRDD.rdd()).offsetRanges();
 
-            // Spark transformation
-            JavaPairRDD<ImmutableBytesWritable, Put> pairRDD = javaRDD.flatMap(consumerRecord -> {
-                Map<String, Object> mapValue = applicationUtil.convertJSONToMap(consumerRecord.value());
-                List<Map<String, Object>> newValue = new ArrayList<>();
+            // Data transformation
+            JavaPairRDD<ImmutableBytesWritable, Put> pairRDD = javaRDD
+                    .flatMap(consumerRecord -> {
+                        Map<String, Object> mapValue = convertJSONToMap(consumerRecord.value());
+                        List<Map<String, Object>> newValue = new ArrayList<>();
 
-                mapValue.keySet()
-                        .stream()
-                        .filter(stringKey -> !stringKey.equals("datetime"))
-                        .forEach(stringKey -> {
-                            Map<String, Object> map = new HashMap<>();
-                            map.put("city", stringKey);
-                            map.put("humidity", mapValue.get(stringKey));
-                            map.put("datetime", mapValue.get("datetime"));
+                        // Reform the data
+                        mapValue.keySet()
+                                .stream()
+                                .filter(stringKey -> !stringKey.equals("datetime"))
+                                .forEach(stringKey -> {
+                                    Map<String, Object> map = new HashMap<>();
+                                    map.put("city", stringKey);
+                                    map.put("humidity", mapValue.get(stringKey.toLowerCase().replace(" ", "_")));
+                                    map.put("datetime", mapValue.get("datetime").toString().replace(" ", "_"));
+                                    newValue.add(map);
+                                });
 
-                            newValue.add(map);
-                        });
+                        return newValue.iterator();
+                    })
+                    .mapToPair(mapValue -> {
+                        /*
+                         * Set city name as row id and datetime as column qualifier
+                         * So a row will represent a city and all its humidity data
+                         */
+                        Put put = new Put(Bytes.toBytes((String) mapValue.get("city")));
+                        put.addColumn(
+                                Bytes.toBytes("humidity"),
+                                Bytes.toBytes((String) mapValue.get("datetime")),
+                                Bytes.toBytes((String) mapValue.get("humidity"))
+                        );
 
-                return newValue.iterator();
-            }).mapToPair(mapValue -> {
+                        return new Tuple2<>(new ImmutableBytesWritable(), put);
+                    });
 
-                // Set HBase row id. Use city name as row id
-                Put put = new Put(Bytes.toBytes(((String) mapValue.get("city")).toLowerCase().replace(" ", "_")));
-
-                // Set HBase column family, column qualifier, and column value. Humidity as column family, datetime value as column qualifier, and humidity value as column value.
-                put.addColumn(Bytes.toBytes("humidity"), Bytes.toBytes(((String) mapValue.get("datetime")).replace(" ", "_")), Bytes.toBytes((String) mapValue.get("humidity")));
-
-                return new Tuple2<>(new ImmutableBytesWritable(), put);
-            });
-
-            // Spark action
             pairRDD.saveAsNewAPIHadoopDataset(hBaseConfig.hbaseJob().getConfiguration());
 
-            // Commit offset manually
+            /*
+             * Commit offset manually
+             * enable.auto.commit in kafka config must be set to false
+             */
             ((CanCommitOffsets) directStream.inputDStream()).commitAsync(offsetRanges);
         });
 
         streamingContext.start();
         streamingContext.awaitTermination();
+    }
+
+    /**
+     * Convert json object to map
+     * @param json - string json object
+     * @return key value object from converted json
+     * @throws IOException
+     */
+    private static Map<String, Object> convertJSONToMap(String json) throws IOException {
+        return new ObjectMapper().readValue(json, Map.class);
     }
 }
